@@ -1,0 +1,15 @@
+# kernel build artefacts
+*.o
+*.ko
+*.ko.xz
+*.mod
+*.mod.c
+*.symvers
+*.order
+.*.cmd
+.tmp_versions/
+
+# local snapshots taken while developing the fix
+backup-*/
+backup-*.txt
+RIPRISTINO.md

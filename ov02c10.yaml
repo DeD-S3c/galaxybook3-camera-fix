@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: CC0-1.0
+#
+# libcamera software-ISP tuning for the OmniVision OV02C10 as fitted to the
+# Samsung Galaxy Book3 Pro.
+#
+# Algorithm order matters: it is the order in which prepare() runs, and both
+# Awb and Ccm left-multiply into the same combined 3x3 matrix that the debayer
+# shader applies.
+#
+%YAML 1.1
+---
+version: 1
+algorithms:
+  # Pedestal the sensor's own BLC block targets (reg 0x4003 = 0x40, i.e. 64
+  # in 10-bit).  Measured on this unit at 1x/8x analogue and 1x/6x digital
+  # gain with a 57 us exposure: mean 63.94-64.07 on every Bayer channel.
+  #
+  # The value here is 16-bit and libcamera shifts it down by 8 for the 8-bit
+  # ISP, so 4096 >> 8 = 16, which is 64 in 10 bits.  Pinning it stops the
+  # auto-estimator from drifting upward on dark scenes and washing the blacks
+  # out to grey.
+  - BlackLevel:
+      blackLevel: 4096
+
+  - Awb:
+
+  # Colour correction.  Without this the raw sensor primaries are left as-is
+  # and everything comes out grey/desaturated - this is the single biggest
+  # cause of the "milky" look.  The matrix is applied by the debayer fragment
+  # shader on the GPU, so it is free: measured 40.8 fps at 1928x1092, i.e.
+  # the full sensor rate, with the CCM enabled.
+  #
+  # Rows sum to 1.0 so the neutral axis is preserved and AWB stays valid.
+  # Deliberately moderate: this sensor is noise-limited and an aggressive
+  # matrix would amplify chroma noise more than it would help saturation.
+  - Ccm:
+      ccms:
+        - ct: 2800
+          ccm: [  1.55, -0.47, -0.08,
+                 -0.30,  1.60, -0.30,
+                  0.02, -0.62,  1.60 ]
+        - ct: 4500
+          ccm: [  1.65, -0.55, -0.10,
+                 -0.33,  1.66, -0.33,
+                  0.00, -0.66,  1.66 ]
+        - ct: 6500
+          ccm: [  1.72, -0.60, -0.12,
+                 -0.35,  1.70, -0.35,
+                 -0.03, -0.68,  1.71 ]
+
+  # Gamma / contrast / saturation.  This algorithm takes no tuning-file
+  # parameters - it registers the Gamma, Contrast and Saturation *runtime
+  # controls* and defaults them to 2.2 / 1.0 / 1.0.  Putting "gamma: 0.5"
+  # here does nothing; set controls::Gamma from the application instead.
+  - Adjust:
+
+  # Exposure/gain.  Also parameterless: it walks V4L2_CID_EXPOSURE up to the
+  # driver's maximum first and only then raises V4L2_CID_ANALOGUE_GAIN, which
+  # is the low-noise strategy - provided the driver's default analogue gain is
+  # 1x, because libcamera has no CameraSensorHelper for ov02c10 and uses that
+  # default as its unity-gain floor.
+  - Agc:
+...
